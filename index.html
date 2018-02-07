@@ -1,1 +1,372 @@
-<p>Hello World</p>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>World Puzzle</title>
+    <link rel="stylesheet" href="https://openlayers.org/en/v4.2.0/css/ol.css" type="text/css">
+    <!-- The line below is only needed for old environments like Internet Explorer and Android 4.x -->
+    <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
+    <script src="https://openlayers.org/en/v4.6.4/build/ol.js"></script>
+	<script src="https://npmcdn.com/@turf/turf@4.6.1/turf.min.js"></script>
+	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js"></script>
+	<link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+	<style>
+		html, body {
+			width: 100%;
+			height: 100%;
+			margin: 0;
+		}
+		.map {
+			width: 100%;
+			height: 100%;
+		}
+		.gamePanel {
+			position: absolute;
+			z-index: 1;
+			bottom: 0;
+			z-index: 1;
+			margin: 10px;
+			background-color: rgba(255, 255, 255, 0.7);
+			padding: 10px;
+		}
+		
+		.counter {
+			font-size: large;
+		}
+		
+		#gameActivePanel {
+			display: none;
+		}
+	</style>
+  </head>
+  <body>
+    <div id="map" class="map">
+		<div class="card gamePanel">
+		  <div class="card-block">
+			<h3>World Puzzle</h3>
+			<button id="startGameButton" class="btn btn-warning" onclick="startGame()">Start game</button>
+			<div id="gameActivePanel">
+				<div class='counter'>
+					<span id="numberFound"></span>
+					<span>/</span>
+					<span id="numberTotal"></span>
+				<div>
+				<button id="toggleSpy" class="btn btn-warning" onclick="activateSpy()">
+					<i class="fa fa-search" aria-hidden="true"></i>Toggle Spyglass
+				</button>
+			</div>
+		  </div>
+		</div>
+	</div>
+    <script>
+		
+	  // TODO: add count down?
+	  
+	  // Game
+	  var countriesFound = 0;
+	  var numberFoundElement = document.getElementById("numberFound");
+	  numberFoundElement.innerHTML = countriesFound;
+	  
+	  var totalNumberOfCountries = 0;
+	  var numberTotalElement = document.getElementById("numberTotal");
+	  numberTotalElement.innerHTML = totalNumberOfCountries;
+	  
+	  var isGameActive = false;
+	  
+	
+	  // Spyglass
+	  var spyActive = false;
+	  var mouseMoveEventListener = function(event) {
+			mousePosition = map.getEventPixel(event);
+			map.render();
+		  }
+			
+	   var mouseOutEventListener = function() {
+			mousePosition = null;
+			map.render();
+		 }	
+		
+	  // Target projection for Turf.js / TM API
+      var DATA_PROJECTION = 'EPSG:4326';
+
+      // Map projection in OpenLayers
+      var MAP_PROJECTION = 'EPSG:3857';
+		
+	  var THRESHOLD_IN_KM = 100;
+	
+      var raster = new ol.layer.Tile({
+		preload: Infinity,
+		source: new ol.source.BingMaps({
+			key: 'AmRNGb2dCC-MBG--EqW-IsrUMGkRZa_m-rfJOE6HhljNDIlFP39dPeq8VRlQzZcm',
+			imagerySet: 'Aerial'
+		})
+      });
+	  
+	  var countriesSource = new ol.source.Vector({
+          url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
+          format: new ol.format.GeoJSON()
+        });
+		
+		var puzzleSource = new ol.source.Vector({
+          url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
+          format: new ol.format.GeoJSON(),
+		  wrapX: false
+        });
+		
+		// Styles
+		
+		var puzzlePiecesStyle = new ol.style.Style({
+			stroke: new ol.style.Stroke({
+				color: 'rgba(255, 255, 255, 1)'
+			}),
+			fill: new ol.style.Fill({
+				color: 'rgba(33, 35, 103, 0.4)'
+			})
+		})	
+		
+		var hiddenStyle = new ol.style.Style({
+			fill: new ol.style.Fill({
+				color: 'rgba(255, 255, 255, 0)'
+			}),
+			stroke: new ol.style.Stroke({
+			  color: '#319FD3',
+			  width: 1
+			}),
+			text: new ol.style.Text({
+			  font: '12px Calibri,sans-serif',
+			  fill: new ol.style.Fill({
+				color: '#000'
+			  }),
+			  stroke: new ol.style.Stroke({
+				color: '#fff',
+				width: 3
+			  })
+			})
+		})
+		
+		var foundStyle = new ol.style.Style({
+			fill: new ol.style.Fill({
+			  color: 'rgba(255, 255, 255, 0.6)'
+			}),
+			stroke: new ol.style.Stroke({
+			  color: 'rgba(33, 35, 103, 1)'
+			}),
+			text: new ol.style.Text({
+			  font: '12px Calibri,sans-serif',
+			  fill: new ol.style.Fill({
+				color: '#000'
+			  }),
+			  stroke: new ol.style.Stroke({
+				color: '#fff',
+				width: 3
+			  })
+			})
+		  });
+		
+		
+	  // Puzzle layer
+	  var puzzleLayer = new ol.layer.Vector({
+        source: puzzleSource,
+		style: puzzlePiecesStyle
+      });
+
+	  
+	  // Reference layer to snap to / show to user when requested
+	  var referenceLayer = new ol.layer.Vector({
+			source: countriesSource,
+			style: function(feature) {
+          hiddenStyle.getText().setText(feature.get('name'));
+          return hiddenStyle;
+        }
+      });
+	  
+	  var foundLayer = new ol.layer.Vector({
+		source: new ol.source.Vector(),
+		style: function(feature) {	
+          foundStyle.getText().setText(feature.get('name'));
+          return foundStyle;
+		}
+	  });
+
+      var select = new ol.interaction.Select({layers: [puzzleLayer]});
+
+      var translate = new ol.interaction.Translate({
+        features: select.getFeatures(),
+		hitTolerance: 30
+      });
+
+	  /**
+	   * Create an OpenLayers map 
+	   */ 
+	  var container = document.getElementById('map'); 
+      var map = new ol.Map({
+        interactions: ol.interaction.defaults().extend([select, translate]),
+        layers: [raster, foundLayer, puzzleLayer, referenceLayer],
+        target: container,
+        view: new ol.View({
+          center: [0, 0],
+          zoom: 2
+        })
+      });
+	
+		
+	  translate.on('translateend', function(evt, feature){
+		// Only one feature can be selected at a time
+		var feature = select.getFeatures().getArray()[0];
+		var id = feature.getId();
+		var referenceCountries = countriesSource.getFeatures();
+		totalNumberOfCountries = referenceCountries.length;
+		for (var i = 0; i < referenceCountries.length; i++){
+			var refId = referenceCountries[i].getId();
+		
+			if (refId == id){
+				// Get the center of the reference feature
+				var refGeometry = referenceCountries[i].getGeometry();
+				var refExtent = refGeometry.getExtent();
+				var refCenter = ol.extent.getCenter(refExtent);
+				var refCenterLatLon = ol.proj.transform(refCenter, MAP_PROJECTION, DATA_PROJECTION);
+				
+				// Get the center of the selected feature
+				var selectedExtent = feature.getGeometry().getExtent();
+				var selectedCenter = ol.extent.getCenter(selectedExtent);
+				var selectedCenterLatLon = ol.proj.transform(selectedCenter, MAP_PROJECTION, DATA_PROJECTION);
+			
+				// Calculate the distance in km with Turf.js
+				var fromPoint = turf.point(refCenterLatLon);
+				var toPoint = turf.point(selectedCenterLatLon);
+				var distance = turf.distance(fromPoint, toPoint, "kilometers");	
+			
+				// If the distance is lower than the threshold - mark the country as found
+				if (distance < THRESHOLD_IN_KM){
+					foundLayer.getSource().addFeature(referenceCountries[i]);
+					puzzleSource.removeFeature(feature);
+					select.getFeatures().clear();
+					countriesFound++;
+					numberFoundElement.innerHTML = countriesFound;
+					if (countriesFound == totalNumberOfCountries){
+						alert("You located all 179 countries!");
+					}
+				}
+				return;
+			}
+		}
+	  });
+	  
+	  // Spyglass
+	   var radius = 75;
+      document.addEventListener('keydown', function(evt) {
+        if (evt.which === 38) {
+          radius = Math.min(radius + 5, 150);
+          map.render();
+          evt.preventDefault();
+        } else if (evt.which === 40) {
+          radius = Math.max(radius - 5, 25);
+          map.render();
+          evt.preventDefault();
+        }
+      });
+
+      // get the pixel position with every move
+      var mousePosition = null;
+
+      // before rendering the layer, do some clipping
+      referenceLayer.on('precompose', function(event) {
+        var ctx = event.context;
+        var pixelRatio = event.frameState.pixelRatio;
+        ctx.save();
+        ctx.beginPath();
+        if (mousePosition) {
+          // only show a circle around the mouse
+          ctx.arc(mousePosition[0] * pixelRatio, mousePosition[1] * pixelRatio,
+              radius * pixelRatio, 0, 2 * Math.PI);
+          ctx.lineWidth = 5 * pixelRatio;
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.stroke();
+        }
+        ctx.clip();
+      });
+
+      // after rendering the layer, restore the canvas context
+      referenceLayer.on('postcompose', function(event) {
+        var ctx = event.context;
+        ctx.restore();
+      });
+	  
+	   /**
+         * Get center of extent
+         * This only works accurately in coordinate systems such as EPSG:3857
+         * @param OL extent
+         * @returns {*[]}
+         */
+        function getCenterOfExtent(extent) {
+            var x = extent[0] + (extent[2] - extent[0]) / 2;
+            var y = extent[1] + (extent[3] - extent[1]) / 2;
+            return [x, y];
+        }
+		
+		/**
+         * Randomise puzzle pieces
+         * Shifts the feature with a random deltaX and deltaY to shuffle the puzzle pieces
+         * @param features
+         */
+		function randomisePuzzlePieces(features){
+			for (var i = 0; i < features.length; i++){
+				var geom = features[i].getGeometry();
+				deltaX = getRandomInt();
+				deltaY = getRandomInt();
+				geom.translate(deltaX, deltaY);
+			}
+		}
+		
+		/**
+		 * Returns a random integer
+		 */
+		function getRandomInt() {
+			var min = -10000000
+			var max = 10000000;
+			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+		
+	
+		/**
+		 * Activate the spy functionality by adding event listeners
+		 */ 
+		function activateSpy(){
+			
+			if (!spyActive){
+				// Add spyglass
+				container.addEventListener('mousemove', mouseMoveEventListener);
+				container.addEventListener('mouseout', mouseOutEventListener);
+				spyActive = true;
+			}
+			else {
+				// Remove spyglass
+				container.removeEventListener('mousemove', mouseMoveEventListener);
+				container.removeEventListener('mouseout', mouseOutEventListener);
+				spyActive = false;
+			}
+	
+		}
+		
+		/**
+		 * Start a game
+		 */
+		function startGame(){
+			isGameActive = true;
+			
+			var gameActivePanel = document.getElementById('gameActivePanel');
+			gameActivePanel.style.display = 'block';
+			
+			var startGameButton = document.getElementById('startGameButton');
+			startGameButton.style.display = 'none';
+			
+			// Set total number of countries
+			var referenceCountries = countriesSource.getFeatures();
+			numberTotalElement.innerHTML = referenceCountries.length;
+			
+			randomisePuzzlePieces(puzzleSource.getFeatures());
+		}
+	  
+    </script>
+  </body>
+</html>
