@@ -7,7 +7,9 @@
     <script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=requestAnimationFrame,Element.prototype.classList,URL"></script>
     <script src="https://openlayers.org/en/v4.6.4/build/ol.js"></script>
 	<script src="https://npmcdn.com/@turf/turf@4.6.1/turf.min.js"></script>
-	<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js"></script>
+	<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
 	<link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
 	<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
 	<style>
@@ -31,11 +33,15 @@
 		}
 		
 		.counter {
-			font-size: large;
+			font-size: x-large;
 		}
 		
 		#gameActivePanel {
 			display: none;
+		}
+		
+		.modal-backdrop {
+			position: static;
 		}
 	</style>
   </head>
@@ -44,77 +50,108 @@
 		<div class="card gamePanel">
 		  <div class="card-block">
 			<h3>World Puzzle</h3>
-			<button id="startGameButton" class="btn btn-warning" onclick="startGame()">Start game</button>
+			<button id="startGameButton" class="btn btn-warning btn-lg" onclick="startGame()">Start game</button>
 			<div id="gameActivePanel">
 				<div class='counter'>
 					<span id="numberFound"></span>
 					<span>/</span>
 					<span id="numberTotal"></span>
 				<div>
-				<button id="toggleSpy" class="btn btn-warning" onclick="activateSpy()">
-					<i class="fa fa-search" aria-hidden="true"></i>Toggle Spyglass
+				<h5>Help tools</h5>
+				<button id="toggleSpy" class="btn btn-warning btn-sm" onclick="activateSpy()">
+					<i class="fa fa-search" aria-hidden="true"></i> Toggle Spyglass
+				</button>
+				<button class="btn btn-warning btn-sm" onclick="listRemainingCountries()">
+					<i class="fa fa-list" aria-hidden="true"></i>List remaining countries
+				</button>
+				<button onclick="zoomToPuzzlePiece()" class="btn btn-warning btn-sm">
+					<i class="fa fa-search" aria-hidden="true"></i>Zoom to next puzzle piece
 				</button>
 			</div>
 		  </div>
 		</div>
 	</div>
-    <script>
-		
-	  // TODO: add count down?
-	  
-	  // Game
-	  var countriesFound = 0;
-	  var numberFoundElement = document.getElementById("numberFound");
-	  numberFoundElement.innerHTML = countriesFound;
-	  
-	  var totalNumberOfCountries = 0;
-	  var numberTotalElement = document.getElementById("numberTotal");
-	  numberTotalElement.innerHTML = totalNumberOfCountries;
-	  
-	  var isGameActive = false;
-	  
+	<div class="modal fade" id="mainingCountriesModal" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+		<div class="modal-dialog" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="exampleModalLabel">Remaining countries</h5>
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+						<span aria-hidden="true">&times;</span>
+					</button>
+				</div>
+				<div class="modal-body"id="remainingCountriesList">
+					...
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
 	
-	  // Spyglass
-	  var spyActive = false;
-	  var mouseMoveEventListener = function(event) {
+    <script>
+	  
+		// Game variables
+		var isGameActive = false;
+	  
+		// Found countries
+		var countriesFound = 0;
+		var numberFoundElement = document.getElementById("numberFound");
+		numberFoundElement.innerHTML = countriesFound;
+	  
+		// Total number of countries
+		var totalNumberOfCountries = 0;
+		var numberTotalElement = document.getElementById("numberTotal");
+		numberTotalElement.innerHTML = totalNumberOfCountries;
+	  
+		// Spyglass
+		var spyActive = false;
+		var mouseMoveEventListener = function(event) {
 			mousePosition = map.getEventPixel(event);
 			map.render();
-		  }
+		}
 			
-	   var mouseOutEventListener = function() {
+		var mouseOutEventListener = function() {
 			mousePosition = null;
 			map.render();
-		 }	
+		}	
 		
-	  // Target projection for Turf.js / TM API
-      var DATA_PROJECTION = 'EPSG:4326';
+		// Target projection for Turf.js
+		var DATA_PROJECTION = 'EPSG:4326';
 
-      // Map projection in OpenLayers
-      var MAP_PROJECTION = 'EPSG:3857';
+		// Map projection in OpenLayers
+		var MAP_PROJECTION = 'EPSG:3857';
 		
-	  var THRESHOLD_IN_KM = 100;
+		// Threshold for marking a piece as matched											
+		var THRESHOLD_IN_KM = 100;
 	
-      var raster = new ol.layer.Tile({
-		preload: Infinity,
-		source: new ol.source.BingMaps({
-			key: 'AmRNGb2dCC-MBG--EqW-IsrUMGkRZa_m-rfJOE6HhljNDIlFP39dPeq8VRlQzZcm',
-			imagerySet: 'Aerial'
-		})
-      });
+		// OpenLayers tiled Bing Layer							
+		var raster = new ol.layer.Tile({
+			preload: Infinity,
+			source: new ol.source.BingMaps({
+				key: 'AmRNGb2dCC-MBG--EqW-IsrUMGkRZa_m-rfJOE6HhljNDIlFP39dPeq8VRlQzZcm',
+				imagerySet: 'Aerial'
+			})
+		});
 	  
-	  var countriesSource = new ol.source.Vector({
-          url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
-          format: new ol.format.GeoJSON()
+		// OpenLayers vector source which acts as a reference source containing all the countries																					   
+		var countriesSource = new ol.source.Vector({
+			url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
+			format: new ol.format.GeoJSON()
         });
 		
+		// OpenLayers vector source which acts as the puzzle source from which puzzle pieces will be removed once they have been matched
+		// Make sure to set wrapX to false because the puzzle pieces might move across the 180° meridian when randomised.																											
 		var puzzleSource = new ol.source.Vector({
-          url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
-          format: new ol.format.GeoJSON(),
-		  wrapX: false
+			url: 'https://openlayers.org/en/v4.2.0/examples/data/geojson/countries.geojson',
+			format: new ol.format.GeoJSON(),
+			wrapX: false
         });
 		
 		// Styles
 		
+		// OpenLayers style for the puzzle pieces 									
 		var puzzlePiecesStyle = new ol.style.Style({
 			stroke: new ol.style.Stroke({
 				color: 'rgba(255, 255, 255, 1)'
@@ -124,182 +161,194 @@
 			})
 		})	
 		
+		// OpenLayers style for the reference countries										 
 		var hiddenStyle = new ol.style.Style({
 			fill: new ol.style.Fill({
 				color: 'rgba(255, 255, 255, 0)'
 			}),
 			stroke: new ol.style.Stroke({
-			  color: '#319FD3',
-			  width: 1
+				color: '#319FD3',
+				width: 1
 			}),
 			text: new ol.style.Text({
-			  font: '12px Calibri,sans-serif',
-			  fill: new ol.style.Fill({
-				color: '#000'
-			  }),
-			  stroke: new ol.style.Stroke({
-				color: '#fff',
-				width: 3
-			  })
+				font: '12px Calibri,sans-serif',
+				fill: new ol.style.Fill({
+					color: '#000'
+				}),
+				stroke: new ol.style.Stroke({
+					color: '#fff',
+					width: 3
+				})
 			})
 		})
 		
+		// OpenLayers style for the countries that have been found													
 		var foundStyle = new ol.style.Style({
 			fill: new ol.style.Fill({
-			  color: 'rgba(255, 255, 255, 0.6)'
+				color: 'rgba(255, 255, 255, 0.6)'
 			}),
 			stroke: new ol.style.Stroke({
-			  color: 'rgba(33, 35, 103, 1)'
+				color: 'rgba(33, 35, 103, 1)'
 			}),
 			text: new ol.style.Text({
-			  font: '12px Calibri,sans-serif',
-			  fill: new ol.style.Fill({
-				color: '#000'
-			  }),
-			  stroke: new ol.style.Stroke({
-				color: '#fff',
-				width: 3
-			  })
+				font: '12px Calibri,sans-serif',
+				fill: new ol.style.Fill({
+					color: '#000'
+				}),
+				stroke: new ol.style.Stroke({
+					color: '#fff',
+					width: 3
+				})
 			})
-		  });
+		});
 		
 		
-	  // Puzzle layer
-	  var puzzleLayer = new ol.layer.Vector({
-        source: puzzleSource,
-		style: puzzlePiecesStyle
-      });
+		// OpenLayers puzzle layer pointing to a source with countries and a style
+		var puzzleLayer = new ol.layer.Vector({
+			source: puzzleSource,
+			style: puzzlePiecesStyle
+		});
 
 	  
-	  // Reference layer to snap to / show to user when requested
-	  var referenceLayer = new ol.layer.Vector({
+		// OpenLayers reference layer pointing to a source with countries and a style function
+		var referenceLayer = new ol.layer.Vector({
 			source: countriesSource,
 			style: function(feature) {
-          hiddenStyle.getText().setText(feature.get('name'));
-          return hiddenStyle;
-        }
-      });
+				hiddenStyle.getText().setText(feature.get('name'));
+				return hiddenStyle;
+			}
+		});
 	  
-	  var foundLayer = new ol.layer.Vector({
-		source: new ol.source.Vector(),
-		style: function(feature) {	
-          foundStyle.getText().setText(feature.get('name'));
-          return foundStyle;
-		}
-	  });
+		// OpenLayers layer containing the found puzzle pieces	 pointing to a source with countries and a style function																											  
+		var foundLayer = new ol.layer.Vector({
+			source: new ol.source.Vector(),
+			style: function(feature) {	
+				foundStyle.getText().setText(feature.get('name'));
+				return foundStyle;
+			}
+		});
 
-      var select = new ol.interaction.Select({layers: [puzzleLayer]});
+		// OpenLayers select interaction to allow the user to select the puzzle pieces																				 
+		var select = new ol.interaction.Select({layers: [puzzleLayer]});
 
-      var translate = new ol.interaction.Translate({
-        features: select.getFeatures(),
-		hitTolerance: 30
-      });
+		// OpenLayers translate interaction to allow the user to move the puzzle pieces 																			  
+		var translate = new ol.interaction.Translate({
+			features: select.getFeatures(),
+			hitTolerance: 30
+		});
 
-	  /**
-	   * Create an OpenLayers map 
-	   */ 
-	  var container = document.getElementById('map'); 
-      var map = new ol.Map({
-        interactions: ol.interaction.defaults().extend([select, translate]),
-        layers: [raster, foundLayer, puzzleLayer, referenceLayer],
-        target: container,
-        view: new ol.View({
-          center: [0, 0],
-          zoom: 2
-        })
-      });
+		/* 	
+		*  Create an OpenLayers map
+		*  Add the layers and interactions	
+		*/  
+		var container = document.getElementById('map'); 
+		var map = new ol.Map({
+			interactions: ol.interaction.defaults().extend([select, translate]),
+			layers: [raster, foundLayer, puzzleLayer, referenceLayer],
+			target: container,
+			view: new ol.View({
+				center: [0, 0],
+				zoom: 2
+			})
+		});
 	
 		
-	  translate.on('translateend', function(evt, feature){
-		// Only one feature can be selected at a time
-		var feature = select.getFeatures().getArray()[0];
-		var id = feature.getId();
-		var referenceCountries = countriesSource.getFeatures();
-		totalNumberOfCountries = referenceCountries.length;
-		for (var i = 0; i < referenceCountries.length; i++){
-			var refId = referenceCountries[i].getId();
-		
-			if (refId == id){
-				// Get the center of the reference feature
-				var refGeometry = referenceCountries[i].getGeometry();
-				var refExtent = refGeometry.getExtent();
-				var refCenter = ol.extent.getCenter(refExtent);
-				var refCenterLatLon = ol.proj.transform(refCenter, MAP_PROJECTION, DATA_PROJECTION);
+		// Event listener on the translate (move) interaction. When a user has moved a puzzle piece, this
+		// function will check if the puzzle piece is close enough to the original country. If so, it will 
+		// remove the puzzle piece from the puzzle layer and add it to the found layer																			
+		translate.on('translateend', function(evt, feature){
+			// Only one feature can be selected at a time, so get the first element in the array
+			var feature = select.getFeatures().getArray()[0];
+			var id = feature.getId();
+			var referenceCountries = countriesSource.getFeatures();
+			totalNumberOfCountries = referenceCountries.length;
+			for (var i = 0; i < referenceCountries.length; i++){
+				var refId = referenceCountries[i].getId();
+				// Make sure that the ID of the puzzle piece is the same as the ID of the country in the reference layer
+				// before the location of the puzzle piece gets checked
+				if (refId == id){
+					// Get the center of the reference feature
+					var refGeometry = referenceCountries[i].getGeometry();
+					var refExtent = refGeometry.getExtent();
+					var refCenter = ol.extent.getCenter(refExtent);
+					var refCenterLatLon = ol.proj.transform(refCenter, MAP_PROJECTION, DATA_PROJECTION);
 				
-				// Get the center of the selected feature
-				var selectedExtent = feature.getGeometry().getExtent();
-				var selectedCenter = ol.extent.getCenter(selectedExtent);
-				var selectedCenterLatLon = ol.proj.transform(selectedCenter, MAP_PROJECTION, DATA_PROJECTION);
+					// Get the center of the selected feature
+					var selectedExtent = feature.getGeometry().getExtent();
+					var selectedCenter = ol.extent.getCenter(selectedExtent);
+					var selectedCenterLatLon = ol.proj.transform(selectedCenter, MAP_PROJECTION, DATA_PROJECTION);
 			
-				// Calculate the distance in km with Turf.js
-				var fromPoint = turf.point(refCenterLatLon);
-				var toPoint = turf.point(selectedCenterLatLon);
-				var distance = turf.distance(fromPoint, toPoint, "kilometers");	
+					// Calculate the distance in km with Turf.js
+					var fromPoint = turf.point(refCenterLatLon);
+					var toPoint = turf.point(selectedCenterLatLon);
+					var distance = turf.distance(fromPoint, toPoint, "kilometers");	
 			
-				// If the distance is lower than the threshold - mark the country as found
-				if (distance < THRESHOLD_IN_KM){
-					foundLayer.getSource().addFeature(referenceCountries[i]);
-					puzzleSource.removeFeature(feature);
-					select.getFeatures().clear();
-					countriesFound++;
-					numberFoundElement.innerHTML = countriesFound;
-					if (countriesFound == totalNumberOfCountries){
-						alert("You located all 179 countries!");
+					// If the distance is lower than the threshold - mark the country as found
+					if (distance < THRESHOLD_IN_KM){
+						foundLayer.getSource().addFeature(referenceCountries[i]);
+						puzzleSource.removeFeature(feature);
+						select.getFeatures().clear();
+						countriesFound++;
+						numberFoundElement.innerHTML = countriesFound;
+						if (countriesFound == totalNumberOfCountries){
+							// All countries found!	  
+							alert("You located all 179 countries!");
+						}
 					}
+					return;
 				}
-				return;
 			}
-		}
-	  });
+		});
 	  
-	  // Spyglass
-	   var radius = 75;
-      document.addEventListener('keydown', function(evt) {
-        if (evt.which === 38) {
-          radius = Math.min(radius + 5, 150);
-          map.render();
-          evt.preventDefault();
-        } else if (evt.which === 40) {
-          radius = Math.max(radius - 5, 25);
-          map.render();
-          evt.preventDefault();
-        }
-      });
+		// Spyglass event listener setup
+		// See OpenLayers example: http://openlayers.org/en/master/examples/layer-spy.html
+		var radius = 75;
+		document.addEventListener('keydown', function(evt) {
+			if (evt.which === 38) {
+				radius = Math.min(radius + 5, 150);
+				map.render();
+				evt.preventDefault();
+			} else if (evt.which === 40) {
+				radius = Math.max(radius - 5, 25);
+				map.render();
+				evt.preventDefault();
+			}
+		});
 
-      // get the pixel position with every move
-      var mousePosition = null;
+		// get the pixel position with every move
+		var mousePosition = null;
 
-      // before rendering the layer, do some clipping
-      referenceLayer.on('precompose', function(event) {
-        var ctx = event.context;
-        var pixelRatio = event.frameState.pixelRatio;
-        ctx.save();
-        ctx.beginPath();
-        if (mousePosition) {
-          // only show a circle around the mouse
-          ctx.arc(mousePosition[0] * pixelRatio, mousePosition[1] * pixelRatio,
-              radius * pixelRatio, 0, 2 * Math.PI);
-          ctx.lineWidth = 5 * pixelRatio;
-          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-          ctx.stroke();
-        }
-        ctx.clip();
-      });
+		// Before rendering the reference layer, do some clipping
+		referenceLayer.on('precompose', function(event) {
+			var ctx = event.context;
+			var pixelRatio = event.frameState.pixelRatio;
+			ctx.save();
+			ctx.beginPath();
+			if (mousePosition) {
+				// only show a circle around the mouse
+				ctx.arc(mousePosition[0] * pixelRatio, mousePosition[1] * pixelRatio,
+				radius * pixelRatio, 0, 2 * Math.PI);
+				ctx.lineWidth = 5 * pixelRatio;
+				ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+				ctx.stroke();
+			}
+			ctx.clip();
+		});
 
-      // after rendering the layer, restore the canvas context
-      referenceLayer.on('postcompose', function(event) {
-        var ctx = event.context;
-        ctx.restore();
-      });
+		// after rendering the layer, restore the canvas context
+		referenceLayer.on('postcompose', function(event) {
+			var ctx = event.context;
+			ctx.restore();
+		});
 	  
-	   /**
+		/**
          * Get center of extent
          * This only works accurately in coordinate systems such as EPSG:3857
          * @param OL extent
-         * @returns {*[]}
+         * @returns {[x,y]}
          */
         function getCenterOfExtent(extent) {
-            var x = extent[0] + (extent[2] - extent[0]) / 2;
+			var x = extent[0] + (extent[2] - extent[0]) / 2;
             var y = extent[1] + (extent[3] - extent[1]) / 2;
             return [x, y];
         }
@@ -345,7 +394,34 @@
 				container.removeEventListener('mouseout', mouseOutEventListener);
 				spyActive = false;
 			}
-	
+		}
+		
+		/**
+		 * List remaining countries in a modal
+		 */
+		function listRemainingCountries(){
+			var remainingCountries = puzzleSource.getFeatures();
+			var remainingCountriesList = document.getElementById('remainingCountriesList');
+			remainingCountriesList.innerHTML = '';
+			for (var i = 0; i < remainingCountries.length; i++){
+				var countryElement = document.createElement('div');
+				countryElement.innerHTML = remainingCountries[i].getProperties().name;
+				remainingCountriesList.append(countryElement);
+			}
+			$('#mainingCountriesModal').modal('toggle');
+		}
+		
+		/**
+		 * Zoom to puzzle piece
+		 */ 
+		function zoomToPuzzlePiece(){
+			var nextPiece = null;
+			var remainingPieces = puzzleSource.getFeatures();
+			if (remainingPieces.length > 0) {
+				nextPiece = puzzleSource.getFeatures()[0];
+				var nextPieceExtent = nextPiece.getGeometry().getExtent();
+				map.getView().fit(nextPieceExtent);
+			}
 		}
 		
 		/**
@@ -366,7 +442,7 @@
 			
 			randomisePuzzlePieces(puzzleSource.getFeatures());
 		}
-	  
+		
     </script>
   </body>
 </html>
