@@ -137,14 +137,14 @@
 	  
 		// OpenLayers vector source which acts as a reference source containing all the countries																					   
 		var countriesSource = new ol.source.Vector({
-			url: 'https://lindaalblas.github.io/countries.geojson',
+			url: 'https://lindaalblas.github.io/data/countries.geojson',
 			format: new ol.format.GeoJSON()
         });
 		
 		// OpenLayers vector source which acts as the puzzle source from which puzzle pieces will be removed once they have been matched
 		// Make sure to set wrapX to false because the puzzle pieces might move across the 180° meridian when randomised.																											
 		var puzzleSource = new ol.source.Vector({
-			url: 'https://lindaalblas.github.io/countries.geojson',
+			url: 'https://lindaalblas.github.io/data/countries.geojson',
 			format: new ol.format.GeoJSON(),
 			wrapX: false
         });
