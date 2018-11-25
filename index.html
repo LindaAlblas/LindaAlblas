@@ -49,7 +49,7 @@
     <div id="map" class="map">
 		<div class="card gamePanel">
 		  <div class="card-block">
-			<h3>World Puzzle</h3>
+			<h3>Countries Puzzle</h3>
 			<button id="startGameButton" class="btn btn-warning btn-lg" onclick="startGame()">Start game</button>
 			<div id="gameActivePanel">
 				<div class='counter'>
@@ -125,6 +125,10 @@
 		
 		// Threshold for marking a piece as matched											
 		var THRESHOLD_IN_KM = 100;
+		
+		// Center of map - Switzerland
+		var long = 8.2275;
+		var lat = 46.8182;
 	
 		// OpenLayers tiled Bing Layer							
 		var raster = new ol.layer.Tile({
@@ -248,9 +252,10 @@
 			target: container,
 			view: new ol.View({
 				center: [0, 0],
-				zoom: 2
+				zoom: 3
 			})
 		});
+		map.getView().setCenter(ol.proj.transform([long, lat], 'EPSG:4326', 'EPSG:3857'));
 	
 		
 		// Event listener on the translate (move) interaction. When a user has moved a puzzle piece, this
